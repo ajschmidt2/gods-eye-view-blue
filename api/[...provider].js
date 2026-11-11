@@ -1,7 +1,7 @@
 import { gnssIntegrityProxy } from '../server/providers/gnssIntegrity.js';
 import { cycloneProxy } from '../server/providers/cyclones.js';
 import { shipwrecksProxy } from '../server/providers/shipwrecks.js';
-import { adaptNodeProvider } from './node-provider-adapter.js';
+import { adaptNodeProvider } from '../server/vercel/node-provider-adapter.js';
 
 // One Vercel function serves three provider routes to stay within Hobby limits.
 const routes = {
