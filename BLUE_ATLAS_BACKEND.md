@@ -55,3 +55,9 @@ The preview endpoints expose only public data. Personal dashboards should be pro
 - The endpoint returns an OpenSky-compatible `{time,states}` payload using the project's existing ADS-B normalizer. Verify live upstream availability and the provider's usage policy before relying on it.
 - FIRMS active fires currently require `FIRMS_MAP_KEY` from NASA's free registration; the original local Vite proxy is not a Vercel production function. No FIRMS production route has been added yet. Do not interpret missing fire markers as no fires.
 - The CI unit-test failures must be investigated before merging.
+
+## Phase 4: NASA FIRMS on Vercel
+
+The existing FIRMS Active Fires globe layer requests `/api/firms`. A Vercel function now implements that endpoint for the contiguous United States using NOAA-20 VIIRS NRT detections from the trailing 24 hours. This is satellite heat detection, not verified wildfire perimeter or incident status. The function caches responses for 30 minutes and returns HTTP 503 `{ "error": "no_key" }` when `FIRMS_MAP_KEY` is not configured. Create a free NASA FIRMS MAP_KEY at https://firms.modaps.eosdis.nasa.gov/api/map_key/ and add it in Vercel project Settings → Environment Variables as `FIRMS_MAP_KEY` (server-only, never `VITE_`); redeploy the preview branch. Test `/api/firms` and enable **FIRMS Active Fires**. No live FIRMS test was possible without the key. This first endpoint is limited to the contiguous US and one VIIRS satellite, not the worldwide multi-sensor feed of the upstream development server.
+
+The weather alerts endpoint is data-only: alert polygons are **not yet rendered** on the globe. Weather radar/satellite layers are separate products and must not be described as NWS warning polygons.
