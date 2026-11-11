@@ -24,6 +24,12 @@ async function check(item) {
       try {
         const body = await response.json();
         if (body?.error === 'no_key') error = 'NASA FIRMS key not configured';
+        else if (item.id === 'flights' && body?.reason) {
+          const reason = String(body.reason);
+          error = reason === 'timeout' ? 'Aircraft provider timed out after bounded retries' :
+            reason === 'upstream_http' && body.upstreamStatus === 429 ? 'Aircraft provider rate-limited requests (HTTP 429)' :
+            'Aircraft provider error: ' + reason;
+        }
       } catch {}
       return { id: item.id, provider: item.provider, status: response.status === 503 ? 'unconfigured' : 'unavailable', checkedAt: new Date().toISOString(), latencyMs, error };
     }
