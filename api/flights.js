@@ -3,33 +3,41 @@ import { normalizeAdsbLolPointResponse } from '../src/data/adsbLolFallback.js';
 const RADIUS_KM = 100;
 const EARTH_RADIUS_KM = 6371.0088;
 const PROVIDER_TIMEOUT_MS = 3800;
-const MAX_ATTEMPTS = 2;
 
-async function fetchAircraftSnapshot(url) {
-  let lastError = 'network';
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+async function fetchAircraftSnapshot(primaryUrl, fallbackUrl) {
+  const providers = [
+    { name: 'adsb.lol', url: primaryUrl },
+    { name: 'adsb.one', url: fallbackUrl },
+  ];
+  const failures = [];
+  for (const provider of providers) {
     try {
-      const response = await fetch(url, {
-        headers: { Accept: 'application/json', 'User-Agent': 'BlueAtlasPersonalDashboard/1.0' },
+      const response = await fetch(provider.url, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'BlueAtlasPersonalDashboard/1.0',
+        },
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
       if (!response.ok) {
-        // Rate limits and client errors must not trigger additional requests.
-        if (response.status === 429 || (response.status >= 400 && response.status < 500))
-          return { error: 'upstream_http', status: response.status, attempts: attempt };
-        lastError = 'upstream_http_' + response.status;
+        failures.push({ provider: provider.name, reason: 'http_' + response.status });
         continue;
       }
       const payload = await response.json();
-      if (!Array.isArray(payload?.ac)) return { error: 'invalid_payload', attempts: attempt };
-      return { payload, attempts: attempt };
+      if (!Array.isArray(payload?.ac)) {
+        failures.push({ provider: provider.name, reason: 'invalid_payload' });
+        continue;
+      }
+      return { payload, provider: provider.name, attempts: failures.length + 1 };
     } catch (error) {
-      lastError = error?.name === 'TimeoutError' ? 'timeout' : 'network';
+      failures.push({
+        provider: provider.name,
+        reason: error?.name === 'TimeoutError' ? 'timeout' : 'network',
+      });
     }
   }
-  return { error: lastError, attempts: MAX_ATTEMPTS };
+  return { failures, attempts: failures.length };
 }
-
 
 function withinRadius(latitude, longitude, centerLat, centerLon) {
   const radians = Math.PI / 180;
@@ -54,15 +62,17 @@ export async function GET(request) {
   }
   // Radius deliberately fixed to limit upstream load and discourage bulk polling.
   const upstreamUrl = `https://api.adsb.lol/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/100`;
+  // adsb.one documents its point radius in nautical miles; 54 nm ≈ 100 km.
+  const fallbackUrl = `https://api.adsb.one/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/54`;
   try {
-    const result = await fetchAircraftSnapshot(upstreamUrl);
+    const result = await fetchAircraftSnapshot(upstreamUrl, fallbackUrl);
     if (!result.payload) {
-      const timeout = result.error === 'timeout';
+      const timeout = result.failures?.every((failure) => failure.reason === 'timeout');
       return Response.json({
         error: timeout ? 'Aircraft provider timed out' : 'Aircraft provider unavailable',
-        reason: result.error,
+        reason: timeout ? 'timeout' : 'all_providers_failed',
         attempts: result.attempts,
-        ...(result.status ? { upstreamStatus: result.status } : {}),
+        providers: result.failures,
       }, { status: timeout ? 504 : 502, headers: { 'Cache-Control': 'no-store' } });
     }
     const payload = result.payload;
@@ -81,7 +91,7 @@ export async function GET(request) {
     return Response.json(snapshot, {
       headers: {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
-        'X-Flight-Source': 'adsb.lol',
+        'X-Flight-Source': result.provider,
         'X-Flight-Attempts': String(result.attempts),
         'X-Flight-Coverage': '100 km radius around requested point',
         'X-Content-Type-Options': 'nosniff',
