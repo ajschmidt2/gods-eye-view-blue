@@ -2,6 +2,42 @@ import { normalizeAdsbLolPointResponse } from '../src/data/adsbLolFallback.js';
 
 const RADIUS_KM = 100;
 const EARTH_RADIUS_KM = 6371.0088;
+const PROVIDER_TIMEOUT_MS = 3800;
+
+async function fetchAircraftSnapshot(primaryUrl, fallbackUrl) {
+  const providers = [
+    { name: 'adsb.lol', url: primaryUrl },
+    { name: 'adsb.fi', url: fallbackUrl },
+  ];
+  const failures = [];
+  for (const provider of providers) {
+    try {
+      const response = await fetch(provider.url, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'BlueAtlasPersonalDashboard/1.0',
+        },
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        failures.push({ provider: provider.name, reason: 'http_' + response.status });
+        continue;
+      }
+      const payload = await response.json();
+      if (!Array.isArray(payload?.ac) && !Array.isArray(payload?.aircraft)) {
+        failures.push({ provider: provider.name, reason: 'invalid_payload' });
+        continue;
+      }
+      return { payload: Array.isArray(payload.ac) ? payload : { ...payload, ac: payload.aircraft }, provider: provider.name, attempts: failures.length + 1 };
+    } catch (error) {
+      failures.push({
+        provider: provider.name,
+        reason: error?.name === 'TimeoutError' ? 'timeout' : 'network',
+      });
+    }
+  }
+  return { failures, attempts: failures.length };
+}
 
 function withinRadius(latitude, longitude, centerLat, centerLon) {
   const radians = Math.PI / 180;
@@ -26,14 +62,20 @@ export async function GET(request) {
   }
   // Radius deliberately fixed to limit upstream load and discourage bulk polling.
   const upstreamUrl = `https://api.adsb.lol/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/100`;
+  // adsb.fi documents a public v3 geographic point endpoint; 54 nm ≈ 100 km.
+  const fallbackUrl = `https://opendata.adsb.fi/api/v3/lat/${lat.toFixed(3)}/lon/${lon.toFixed(3)}/dist/54`;
   try {
-    const upstream = await fetch(upstreamUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BlueAtlasPersonalDashboard/1.0' },
-      signal: AbortSignal.timeout(8500),
-    });
-    if (!upstream.ok) return Response.json({ error: 'Aircraft provider unavailable', upstreamStatus: upstream.status }, { status: 502 });
-    const payload = await upstream.json();
-    if (!Array.isArray(payload?.ac)) throw new Error('Invalid ADS-B payload');
+    const result = await fetchAircraftSnapshot(upstreamUrl, fallbackUrl);
+    if (!result.payload) {
+      const timeout = result.failures?.every((failure) => failure.reason === 'timeout');
+      return Response.json({
+        error: timeout ? 'Aircraft provider timed out' : 'Aircraft provider unavailable',
+        reason: timeout ? 'timeout' : 'all_providers_failed',
+        attempts: result.attempts,
+        providers: result.failures,
+      }, { status: timeout ? 504 : 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const payload = result.payload;
     const snapshot = normalizeAdsbLolPointResponse(payload);
     // Independently enforce our advertised radius, even if the upstream
     // interprets its point radius differently or returns extra contacts.
@@ -49,7 +91,8 @@ export async function GET(request) {
     return Response.json(snapshot, {
       headers: {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
-        'X-Flight-Source': 'adsb.lol',
+        'X-Flight-Source': result.provider,
+        'X-Flight-Attempts': String(result.attempts),
         'X-Flight-Coverage': '100 km radius around requested point',
         'X-Content-Type-Options': 'nosniff',
       },

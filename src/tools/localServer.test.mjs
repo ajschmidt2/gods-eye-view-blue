@@ -76,8 +76,8 @@ test('the stdio server answers newline-delimited requests using only its data so
     byId.get(3).result.content[0].text,
     '1 earthquake of M2.5+ in the last 24 hours worldwide; strongest M5.1 near Hualien.',
   );
-  // The earthquake feed is fetched directly; nothing else was contacted.
-  assert.deepEqual(contacted, ['https://earthquake.usgs.gov']);
+  // The earthquake tool uses the configured application API proxy.
+  assert.deepEqual(contacted, ['http://127.0.0.1:5000']);
 });
 
 test('command-line arguments are strict', () => {

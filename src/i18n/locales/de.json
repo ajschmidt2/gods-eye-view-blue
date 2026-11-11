@@ -3464,5 +3464,9 @@
   "ICAO: {id}": "ICAO: {id}",
   "NORAD: {id}": "NORAD: {id}",
   "MMSI: {id}": "MMSI: {id}",
-  "Vessel UUID: {id}": "Schiffs-UUID: {id}"
+  "Vessel UUID: {id}": "Schiffs-UUID: {id}",
+  "NWS Weather Alerts (Indiana)": "NWS-Wetterwarnungen (Indiana)",
+  "NASA Natural Events": "NASA-Naturereignisse",
+  "NASA EONET unavailable": "NASA EONET nicht verfügbar",
+  "NWS unavailable": "NWS nicht verfügbar"
 }
