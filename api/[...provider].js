@@ -2,6 +2,7 @@ import { gnssIntegrityProxy } from '../server/providers/gnssIntegrity.js';
 import { cycloneProxy } from '../server/providers/cyclones.js';
 import { shipwrecksProxy } from '../server/providers/shipwrecks.js';
 import { adaptNodeProvider } from '../server/vercel/node-provider-adapter.js';
+import { satelliteProxy } from '../server/vercel/satellite-proxy.js';
 
 // One Vercel function serves three provider routes to stay within Hobby limits.
 const routes = {
@@ -10,9 +11,20 @@ const routes = {
   shipwrecks: adaptNodeProvider(shipwrecksProxy(), '/api/shipwrecks'),
 };
 
+async function serveSatellite(req, res, kind) {
+  const url = new URL(req.url || '/', 'https://blueatlas.invalid');
+  const response = await satelliteProxy(new Request(url, { method: req.method || 'GET' }), kind);
+  res.statusCode = response.status;
+  response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
+
 export default function handler(req, res) {
   const url = new URL(req.url || '/', 'https://blueatlas.invalid');
   const segment = url.pathname.split('/')[2];
+  if (segment === 'celestrak' || segment === 'celestrak-satcat') {
+    return serveSatellite(req, res, segment === 'celestrak' ? 'tle' : 'satcat');
+  }
   const route = routes[segment];
   if (!route) {
     res.statusCode = 404;
