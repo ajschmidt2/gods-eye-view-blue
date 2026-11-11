@@ -19,6 +19,7 @@
   ["military-awareness", "g"],
   ["military-installations", "i"],
   ["news", "00"],
+  ["nws-weather-alerts", "02"],
   ["radio", "r"],
   ["recent-imagery", "1"],
   ["rocket-launches", "x"],
