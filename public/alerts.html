@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blue Atlas | Alert Watch</title><style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#071322;color:#e8f1fa}*{box-sizing:border-box}body{max-width:1080px;margin:auto;padding:28px 18px}a{color:#91caff}p,small{color:#a9bacb}h1{margin-bottom:4px}.controls{display:flex;flex-wrap:wrap;align-items:end;gap:14px;padding:18px;background:#10243b;border-radius:12px;margin:24px 0}label{display:grid;gap:6px}select,button{padding:11px 14px;border-radius:8px;font:inherit}select{background:#0b1c2e;color:white;border:1px solid #4c6a85}button{background:#236bb6;border:0;color:white;cursor:pointer}button:disabled{opacity:.55}section{margin:22px 0}article{padding:18px;border:1px solid #34506b;border-radius:12px;background:#10243b;margin:12px 0}.severity{font-size:12px;padding:4px 9px;border-radius:20px;background:#475569}.Extreme,.Severe{background:#792c36}.Moderate{background:#80621e}.Minor{background:#315d7d}header{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap}.meta{font-size:13px;color:#b1c3d4}#message{min-height:24px}footer{margin-top:30px;border-top:1px solid #34506b;padding-top:18px}
+</style></head><body><header><div><a href="/">← Blue Atlas globe</a><h1>Weather Alert Watch</h1><p>Official National Weather Service alerts by state</p></div><a href="/status.html">Data health</a></header>
+<div class="controls"><label>State 1<select id="s1"></select></label><label>State 2 (optional)<select id="s2"></select></label><label>State 3 (optional)<select id="s3"></select></label><button id="refresh">Check alerts</button></div>
+<p id="message" role="status" aria-live="polite"></p><main id="results"></main>
+<footer><p><strong>Safety:</strong> This is a manually refreshed informational dashboard, not an emergency notification service. Keep Wireless Emergency Alerts and local official warning channels enabled. No alerts returned does not guarantee safety. State preferences are saved only in this browser.</p></footer>
+<script>
+const states={AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'District of Columbia'};
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const selects=[1,2,3].map(n=>document.getElementById('s'+n));
+for(const s of selects){s.innerHTML='<option value="">None</option>'+Object.entries(states).map(([code,name])=>'<option value="'+code+'">'+esc(name)+'</option>').join('')}
+let saved=['IN','OH','IL'];try{const v=JSON.parse(localStorage.getItem('blue-atlas-watch-states'));if(Array.isArray(v))saved=v}catch{}
+selects.forEach((s,i)=>s.value=states[saved[i]]?saved[i]:'');
+const results=document.getElementById('results'),message=document.getElementById('message'),button=document.getElementById('refresh');
+async function load(){
+ const codes=[...new Set(selects.map(s=>s.value).filter(Boolean))];
+ if(!codes.length){message.textContent='Select at least one state.';return}
+ try{localStorage.setItem('blue-atlas-watch-states',JSON.stringify(codes))}catch{}
+ button.disabled=true;message.textContent='Checking NWS alerts…';
+ try{
+  const response=await fetch('/api/alert-watch?states='+encodeURIComponent(codes.join(',')),{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  results.innerHTML=data.results.map(group=>{
+   const title=esc(states[group.state]||group.state);
+   if(group.status!=='ok')return '<section><h2>'+title+'</h2><article>Source unavailable. This does not mean there are no warnings.</article></section>';
+   const items=group.alerts.map(a=>'<article><span class="severity '+esc(a.severity)+'">'+esc(a.severity)+'</span><h3>'+esc(a.event)+'</h3><p>'+esc(a.headline)+'</p><div class="meta">Areas: '+esc(a.areaDesc)+' · Expires: '+esc(a.expires?new Date(a.expires).toLocaleString():'Not specified')+'</div>'+(a.instruction?'<p>'+esc(a.instruction)+'</p>':'')+(a.url?'<a target="_blank" rel="noopener noreferrer" href="'+esc(a.url)+'">Official NWS alert</a>':'')+'</article>').join('');
+   return '<section><h2>'+title+' — '+group.count+' active alerts</h2>'+(items||'<article>No active alerts reported for this state at the time of this check.</article>')+(group.truncated?'<p>Showing first 250 alerts.</p>':'')+'</section>';
+  }).join('');
+  message.textContent='Checked '+new Date(data.checkedAt).toLocaleString()+'. Refresh manually for newer information.';
+ }catch(error){message.textContent='Could not check alerts: '+error.message;results.innerHTML=''}
+ finally{button.disabled=false}
+}
+button.addEventListener('click',load);load();
+</script></body></html>

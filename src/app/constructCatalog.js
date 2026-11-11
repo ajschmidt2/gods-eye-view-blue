@@ -2,6 +2,8 @@ import { resolveCatalogSources } from './sourceComposition.js';
 import { createWeatherClock } from '../layers/weather/clock.js';
 import { worldClock } from '../time/worldClock.js';
 import { createWeatherLayer } from '../layers/weather/index.js';
+import { createNwsWeatherAlertsLayer } from '../layers/weather/nwsAlerts.js';
+import { createNasaNaturalEventsLayer } from '../layers/naturalEvents/index.js';
 import { createApplicationCyclones } from './layers/cyclones.js';
 import { createWindLayer } from '../layers/wind/index.js';
 import { createLayerCatalog } from './catalog.js';
@@ -129,6 +131,8 @@ export function createApplicationCatalog({
           ...(resolveAsset ? { resolveAsset } : {}),
         }),
         createApplicationEarthquakes({ source: sources.earthquakes }),
+        createNwsWeatherAlertsLayer(),
+        createNasaNaturalEventsLayer(),
         createApplicationAirQuality({ source: sources['air-quality'] }),
         createApplicationFirePerimeters({
           source: sources['fire-perimeters'],
