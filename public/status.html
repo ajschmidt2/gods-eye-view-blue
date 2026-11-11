@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blue Atlas | Data Source Health</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#071322;color:#e8f1fa}
+*{box-sizing:border-box}body{max-width:1050px;margin:auto;padding:32px 20px}a{color:#8dc9ff}
+header{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+h1{margin:6px 0}p{color:#a8bacb}button{background:#2469b0;color:white;border:0;border-radius:9px;padding:12px 18px;cursor:pointer;font-weight:600}
+#cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:28px 0}
+article{background:#10243b;border:1px solid #29445d;border-radius:14px;padding:20px;min-height:195px}
+article h2{font-size:18px;margin:0 0 8px}.state{display:inline-block;border-radius:20px;padding:4px 10px;background:#34435a;font-size:13px}
+.operational{background:#174b3c;color:#a7f7cd}.stale{background:#634b1c;color:#ffe0a0}.unavailable,.unconfigured{background:#682d39;color:#ffbdc8}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px}dt{color:#9bb1c4}dd{margin:0;text-align:right}
+footer{font-size:13px;color:#a8bacb;border-top:1px solid #29445d;padding-top:18px}
+</style>
+</head>
+<body>
+<header><div><a href="/">← Blue Atlas globe</a><h1>Data Source Health</h1><p>Live provider checks · not a guarantee of coverage or uninterrupted service</p></div><button id="refresh" type="button">Refresh checks</button></header>
+<p id="summary" role="status" aria-live="polite">Loading source health…</p>
+<main id="cards" aria-label="Source health results"></main>
+<footer>Checks are cached for approximately two minutes. Aircraft counts reflect an Indianapolis-area sample, not global traffic. FIRMS hotspots are not confirmed wildfire incidents. No NWS alerts does not mean weather is safe; consult official warnings for safety decisions.</footer>
+<script>
+const cards=document.getElementById('cards'),summary=document.getElementById('summary'),button=document.getElementById('refresh');
+const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const date=v=>v?new Date(v).toLocaleString():'Not available';
+async function load(){
+ button.disabled=true;summary.textContent='Checking live providers…';
+ try{
+  const response=await fetch('/api/source-health',{cache:'no-store'});
+  if(!response.ok)throw Error('Health endpoint HTTP '+response.status);
+  const data=await response.json();
+  if(!Array.isArray(data.sources))throw Error('Invalid health response');
+  cards.innerHTML=data.sources.map(s=>`<article><h2>${esc(s.provider)}</h2><span class="state ${esc(s.status)}">${esc(s.status)}</span><dl><dt>Observations</dt><dd>${esc(s.count)}</dd><dt>Response</dt><dd>${esc(s.latencyMs)} ms</dd><dt>Timestamp</dt><dd>${esc(date(s.observationTime))}</dd><dt>Age</dt><dd>${s.ageSeconds==null?'Unknown':esc(Math.round(s.ageSeconds/60))+' min'}</dd></dl><p>${esc(s.note||s.error||'')}</p></article>`).join('');
+  summary.textContent='Last checked: '+date(data.checkedAt)+' · '+data.sources.filter(s=>s.status==='operational').length+' of '+data.sources.length+' responding with recent data';
+ }catch(error){summary.textContent='Unable to load source health: '+error.message;cards.innerHTML='';}
+ finally{button.disabled=false;}
+}
+button.addEventListener('click',load);load();
+</script>
+</body></html>
