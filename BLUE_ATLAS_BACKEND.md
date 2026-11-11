@@ -47,3 +47,11 @@ The preview endpoints expose only public data. Personal dashboards should be pro
 - The weather endpoint is **not yet rendered as a globe layer**. NWS alerts are US-only, and some alerts lack point or polygon geometry.
 - Validate both endpoints on the latest preview URL before merging. A 502 indicates the upstream request failed or timed out.
 - Aircraft and wildfire integrations are not yet deployed; validate provider terms, rate limits, and response formats before adding them.
+
+## Phase 3: Globe earthquakes and regional aircraft
+
+- The existing Earthquakes (24h) layer now tries `/api/earthquakes?period=day` first and falls back to USGS directly when the proxy is unavailable.
+- `/api/flights?lat=39.7684&lon=-86.1581` queries a bounded 100 km radius around the supplied location using the community adsb.lol v2 point API. This is **not global coverage**. The existing Flights layer already requests `/api/flights` with `lat` and `lon` for regional views; confirm those query parameters are present in browser Network requests. Without coordinates, the endpoint intentionally returns HTTP 400 rather than falsely claiming worldwide data.
+- The endpoint returns an OpenSky-compatible `{time,states}` payload using the project's existing ADS-B normalizer. Verify live upstream availability and the provider's usage policy before relying on it.
+- FIRMS active fires currently require `FIRMS_MAP_KEY` from NASA's free registration; the original local Vite proxy is not a Vercel production function. No FIRMS production route has been added yet. Do not interpret missing fire markers as no fires.
+- The CI unit-test failures must be investigated before merging.
