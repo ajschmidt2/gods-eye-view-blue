@@ -100,7 +100,7 @@ function withPublishedBase(
 // The ledger before Wildlife Sightings took the last digit and News and
 // Shipwrecks the first pairs, for the allocation rules written against it.
 const beforeLastDigitRows = reservationRows.filter(
-  ([id]) => !['wildlife-sightings', 'news', 'shipwrecks'].includes(id),
+  ([id]) => !['wildlife-sightings', 'news', 'shipwrecks', 'nws-weather-alerts', 'nasa-natural-events'].includes(id),
 );
 
 function writeCodecFixture(cwd, rows, entries) {
@@ -192,7 +192,7 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
     /Duplicate layer-state token reservation/,
   );
   assert.equal(
-    parseLayerStateTokenReservations([...reservationRows, ['future', '02']])
+    parseLayerStateTokenReservations([...reservationRows, ['future', '04']])
       .future,
     '02',
   );
@@ -315,7 +315,7 @@ test('PR B manually replaces provisional 9 with 00 after PR A publishes 9', () =
       );
       const corrected = runCheck();
       assert.equal(corrected.status, 0, corrected.stderr);
-      assert.match(corrected.stdout, /38 published, 1 new/);
+      assert.match(corrected.stdout, /36 published, 1 new/);
     },
   );
 });
@@ -377,7 +377,7 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
       `qa-prior-digit-${digit}`,
       digit,
     ]);
-    const fixtureLayers = ['04', '05', '06', '07'].map((token) => ({
+    const fixtureLayers = ['00', '01', '02', '03'].map((token) => ({
       id: `qa-layer-${token}`,
       token,
     }));
@@ -413,7 +413,7 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
     const params = new URLSearchParams([['v', '2']]);
     codec.encodeLayerStateParams(params, state);
     assert.ok(params.get('l').length > 64, 'fixture must cross the old cap');
-    assert.equal(params.get('l').length, 85);
+    assert.equal(params.get('l').length, 81);
     const restored = codec.decodeLayerStateParams(params);
     assert.deepEqual(restored?.enabledLayerIds, expectedLayerIds);
     assert.deepEqual(restored?.options, state.options);
