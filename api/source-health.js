@@ -8,7 +8,7 @@ import { GET as naturalEvents } from './natural-events.js';
 // Calling the same handlers as the globe avoids false green configuration-only checks.
 const CHECKS = [
   { id: 'earthquakes', provider: 'USGS', call: () => earthquakes(new Request('https://blue-atlas.invalid/api/earthquakes?period=day')), freshnessMs: 5 * 60_000 },
-  { id: 'flights', provider: 'adsb.lol / adsb.one', call: () => flights(new Request('https://blue-atlas.invalid/api/flights?lat=39.7684&lon=-86.1581')), freshnessMs: 3 * 60_000 },
+  { id: 'flights', provider: 'adsb.lol / adsb.fi', call: () => flights(new Request('https://blue-atlas.invalid/api/flights?lat=39.7684&lon=-86.1581')), freshnessMs: 3 * 60_000 },
   { id: 'wildfires', provider: 'NASA FIRMS', call: () => firms(), freshnessMs: 60 * 60_000 },
   { id: 'weather-alerts', provider: 'NWS', call: () => weatherAlerts(new Request('https://blue-atlas.invalid/api/weather-alerts?area=IN')), freshnessMs: 5 * 60_000 },
   { id: 'natural-events', provider: 'NASA EONET', call: () => naturalEvents(new Request('https://blue-atlas.invalid/api/natural-events?days=14')), freshnessMs: 15 * 60_000 },
