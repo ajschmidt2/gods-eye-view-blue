@@ -1,6 +1,12 @@
 name: Regenerate Blue Atlas app icons
 
 on:
+  push:
+    branches:
+      - brand/blue-atlas-foundation
+    paths:
+      - public/logo.svg
+      - .github/workflows/blue-atlas-icons.yml
   workflow_dispatch:
 
 permissions:
