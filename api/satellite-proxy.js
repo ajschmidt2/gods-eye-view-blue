@@ -1,50 +1,79 @@
-import { celestrakSatcatUrl, celestrakTleUrl } from '../src/data/spaceProviderRequests.js';
+import {
+  celestrakSatcatUrl,
+  celestrakTleUrl,
+} from '../src/data/spaceProviderRequests.js';
 
 const GROUPS = new Set([
-  'stations', 'visual', 'gps-ops', 'glo-ops', 'galileo', 'geo',
-  'starlink', 'resource', 'weather', 'planet', 'sar', 'science', 'active',
+  'stations',
+  'visual',
+  'gps-ops',
+  'glo-ops',
+  'galileo',
+  'geo',
+  'starlink',
+  'resource',
+  'weather',
+  'planet',
+  'sar',
+  'science',
+  'active',
 ]);
-const SATCAT_GROUPS = new Set([...GROUPS].filter((group) => group !== 'starlink' && group !== 'active'));
 const MAX_BYTES = 16 * 1024 * 1024;
+
+function failure(code, status = 502, upstreamStatus = null) {
+  return Response.json(
+    { error: code, upstreamStatus },
+    { status, headers: { 'Cache-Control': 'no-store' } },
+  );
+}
 
 export async function satelliteProxy(request, kind) {
   const group = new URL(request.url).pathname.split('/').pop()?.toLowerCase();
+  if (!GROUPS.has(group)) return failure('unsupported_group', 400);
   const satcat = kind === 'satcat';
-  if (!(satcat ? SATCAT_GROUPS : GROUPS).has(group)) {
-    return Response.json({ error: 'Unsupported satellite group' }, { status: 400 });
-  }
   const upstream = satcat ? celestrakSatcatUrl(group) : celestrakTleUrl(group);
+  let response;
   try {
-    const response = await fetch(upstream, {
+    response = await fetch(upstream, {
       headers: { Accept: satcat ? 'text/csv' : 'text/plain' },
       signal: AbortSignal.timeout(12000),
     });
-    if (!response.ok) {
-      return Response.json({ error: 'Satellite provider unavailable', upstreamStatus: response.status }, {
-        status: 502, headers: { 'Cache-Control': 'no-store' },
-      });
-    }
-    const length = Number(response.headers.get('content-length'));
-    if (Number.isFinite(length) && length > MAX_BYTES) {
-      return Response.json({ error: 'Satellite response exceeds size limit' }, { status: 502 });
-    }
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_BYTES ||
-        !(satcat ? body.startsWith('OBJECT_NAME,') : /^1 /m.test(body))) {
-      return Response.json({ error: 'Invalid satellite provider response' }, { status: 502 });
-    }
-    return new Response(body, {
-      headers: {
-        'Content-Type': satcat ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8',
-        'Cache-Control': satcat
-          ? 'public, s-maxage=86400, stale-while-revalidate=86400'
-          : 'public, s-maxage=21600, stale-while-revalidate=21600',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    });
   } catch {
-    return Response.json({ error: 'Satellite provider timed out or unreachable' }, {
-      status: 502, headers: { 'Cache-Control': 'no-store' },
-    });
+    return failure('upstream_unreachable');
   }
+  if (!response.ok) {
+    await response.body?.cancel();
+    return failure('upstream_http_error', 502, response.status);
+  }
+  const length = Number(response.headers.get('content-length'));
+  if (Number.isFinite(length) && length > MAX_BYTES)
+    return failure('response_too_large');
+  let body;
+  try {
+    body = await response.text();
+  } catch {
+    return failure('upstream_body_error');
+  }
+  if (new TextEncoder().encode(body).byteLength > MAX_BYTES)
+    return failure('response_too_large');
+  // CelesTrak can prepend CSV metadata or change column order. Require a
+  // recognizable catalog column rather than one exact first-column header.
+  const valid = satcat
+    ? /(?:^|,)\s*(?:OBJECT_NAME|NORAD_CAT_ID|OBJECT_ID)\s*(?:,|$)/im.test(
+        body.split(/\r?\n/, 1)[0],
+      )
+    : /^1 [0-9]{5}/m.test(body) && /^2 [0-9]{5}/m.test(body);
+  if (!valid) return failure('invalid_upstream_payload');
+  return new Response(body, {
+    headers: {
+      'Content-Type': satcat
+        ? 'text/csv; charset=utf-8'
+        : 'text/plain; charset=utf-8',
+      'Cache-Control': satcat
+        ? 'public, s-maxage=86400, stale-while-revalidate=86400'
+        : 'public, s-maxage=7200, stale-while-revalidate=7200',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Satellite-Provider': 'celestrak',
+    },
+  });
 }
