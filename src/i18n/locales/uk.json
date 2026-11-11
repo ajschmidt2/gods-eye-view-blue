@@ -3628,5 +3628,7 @@
   "MMSI: {id}": "MMSI: {id}",
   "Vessel UUID: {id}": "UUID судна: {id}",
   "NWS Weather Alerts (Indiana)": "Погодні попередження NWS (Індіана)",
-  "NASA Natural Events": "Природні явища NASA"
+  "NASA Natural Events": "Природні явища NASA",
+  "NASA EONET unavailable": "NASA EONET недоступний",
+  "NWS unavailable": "NWS недоступний"
 }
