@@ -2544,6 +2544,8 @@
       "src/annotations/worldAnnotationRenderer.js",
       "src/app/catalog.js",
       "src/app/constructCatalog.js",
+      "src/layers/weather/nwsAlerts.js",
+      "src/layers/naturalEvents/index.js",
       "src/app/sourceComposition.js",
       "src/app/controls.js",
       "src/app/data.js",
