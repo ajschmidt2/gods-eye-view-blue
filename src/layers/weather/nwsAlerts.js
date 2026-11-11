@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { msg } from '../../i18n/marker.js';
 
 const SEVERITY = Object.freeze({
   Extreme: Cesium.Color.RED,
@@ -149,7 +150,7 @@ export function createNwsWeatherAlertsLayer({
         return true;
       } catch (cause) {
         if (!controller.signal.aborted)
-          error = cause?.message || 'NWS unavailable';
+          error = cause?.message || msg('NWS unavailable');
         return false;
       } finally {
         if (request === controller) request = null;
