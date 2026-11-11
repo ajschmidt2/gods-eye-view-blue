@@ -65,3 +65,7 @@ The weather alerts endpoint is data-only: alert polygons are **not yet rendered*
 ## Phase 5: Data health dashboard
 
 Open `/status.html` on the Preview deployment for a read-only dashboard. `/api/source-health` performs on-demand checks using the actual source handlers for USGS earthquakes, Indianapolis-area ADS-B flights, contiguous-US NASA FIRMS, and Indiana NWS alerts. Results are cached for 120 seconds; provider checks are not continuous uptime monitoring. Counts are observations and may be zero legitimately. Observation timestamps can be upstream generation or retrieval timestamps, not newest record timestamps. The dashboard does not replace official warnings. `/api/source-status` remains a configuration inventory and does not imply upstream health.
+
+## NASA EONET natural events
+
+`/api/natural-events?days=14` retrieves open NASA EONET natural events for a bounded 1–30 day lookback, with optional allowlisted `category`. The globe layer `NASA Natural Events` shows reported Point coordinates only; polygon-only observations are omitted rather than assigning misleading centroids. The feed requires no key and is also included in `/api/source-health`. NASA event markers are not real-time emergency warnings.
