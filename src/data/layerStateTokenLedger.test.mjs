@@ -129,6 +129,14 @@ function writeCodecFixture(cwd, rows, entries) {
       /  Object\.freeze\(\{\s*id: 'news',[\s\S]*?\}\),\n/,
       '',
     );
+  for (const id of ['nws-weather-alerts', 'nasa-natural-events']) {
+    if (!rows.some(([rowId]) => rowId === id)) {
+      source = source.replace(
+        new RegExp(`  Object\\.freeze\\(\\{\\s*id: '${id}',[\\s\\S]*?\\}\\),\\n`),
+        '',
+      );
+    }
+  }
   if (!rows.some(([id]) => id === 'shipwrecks'))
     source = source.replace(
       /  Object\.freeze\(\{\s*id: 'shipwrecks',[\s\S]*?\}\),\n/,
@@ -201,7 +209,7 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
   assert.equal(
     parseLayerStateTokenReservations([...reservationRows, ['future', '04']])
       .future,
-    '02',
+    '04',
   );
   assert.throws(
     () =>
