@@ -2,6 +2,7 @@ import { resolveCatalogSources } from './sourceComposition.js';
 import { createWeatherClock } from '../layers/weather/clock.js';
 import { worldClock } from '../time/worldClock.js';
 import { createWeatherLayer } from '../layers/weather/index.js';
+import { createNwsWeatherAlertsLayer } from '../layers/weather/nwsAlerts.js';
 import { createApplicationCyclones } from './layers/cyclones.js';
 import { createWindLayer } from '../layers/wind/index.js';
 import { createLayerCatalog } from './catalog.js';
