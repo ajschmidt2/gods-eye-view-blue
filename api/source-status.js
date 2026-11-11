@@ -6,6 +6,7 @@ export function GET() {
     note: 'configured does not mean upstream is healthy; test each endpoint separately',
     sources: [
       { id: 'earthquakes', provider: 'USGS', endpoint: '/api/earthquakes?period=day', configured: true, keyRequired: false, coverage: 'global' },
+      { id: 'flights', provider: 'adsb.lol', endpoint: '/api/flights?lat=39.7684&lon=-86.1581', configured: true, keyRequired: false, coverage: '100 km around supplied coordinates; upstream limits apply' },
       { id: 'weather-alerts', provider: 'US National Weather Service', endpoint: '/api/weather-alerts?area=IN', configured: true, keyRequired: false, coverage: 'US only' },
     ],
   }, { headers: { 'Cache-Control': 'no-store' } });
