@@ -3642,6 +3642,8 @@
       "src/annotations/resolver.js",
       "src/app/catalog.js",
       "src/app/constructCatalog.js",
+      "src/layers/weather/nwsAlerts.js",
+      "src/layers/naturalEvents/index.js",
       "src/app/sourceComposition.js",
       "src/layers/wind/index.js",
       "src/layers/wind/model.js",
