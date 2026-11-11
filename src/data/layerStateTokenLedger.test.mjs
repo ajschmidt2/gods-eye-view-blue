@@ -100,7 +100,14 @@ function withPublishedBase(
 // The ledger before Wildlife Sightings took the last digit and News and
 // Shipwrecks the first pairs, for the allocation rules written against it.
 const beforeLastDigitRows = reservationRows.filter(
-  ([id]) => !['wildlife-sightings', 'news', 'shipwrecks', 'nws-weather-alerts', 'nasa-natural-events'].includes(id),
+  ([id]) =>
+    ![
+      'wildlife-sightings',
+      'news',
+      'shipwrecks',
+      'nws-weather-alerts',
+      'nasa-natural-events',
+    ].includes(id),
 );
 
 function writeCodecFixture(cwd, rows, entries) {
