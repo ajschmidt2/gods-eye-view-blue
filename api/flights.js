@@ -7,7 +7,7 @@ const PROVIDER_TIMEOUT_MS = 3800;
 async function fetchAircraftSnapshot(primaryUrl, fallbackUrl) {
   const providers = [
     { name: 'adsb.lol', url: primaryUrl },
-    { name: 'adsb.one', url: fallbackUrl },
+    { name: 'adsb.fi', url: fallbackUrl },
   ];
   const failures = [];
   for (const provider of providers) {
@@ -24,11 +24,11 @@ async function fetchAircraftSnapshot(primaryUrl, fallbackUrl) {
         continue;
       }
       const payload = await response.json();
-      if (!Array.isArray(payload?.ac)) {
+      if (!Array.isArray(payload?.ac) && !Array.isArray(payload?.aircraft)) {
         failures.push({ provider: provider.name, reason: 'invalid_payload' });
         continue;
       }
-      return { payload, provider: provider.name, attempts: failures.length + 1 };
+      return { payload: Array.isArray(payload.ac) ? payload : { ...payload, ac: payload.aircraft }, provider: provider.name, attempts: failures.length + 1 };
     } catch (error) {
       failures.push({
         provider: provider.name,
@@ -62,8 +62,8 @@ export async function GET(request) {
   }
   // Radius deliberately fixed to limit upstream load and discourage bulk polling.
   const upstreamUrl = `https://api.adsb.lol/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/100`;
-  // adsb.one documents its point radius in nautical miles; 54 nm ≈ 100 km.
-  const fallbackUrl = `https://api.adsb.one/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/54`;
+  // adsb.fi documents a public v3 geographic point endpoint; 54 nm ≈ 100 km.
+  const fallbackUrl = `https://opendata.adsb.fi/api/v3/lat/${lat.toFixed(3)}/lon/${lon.toFixed(3)}/dist/54`;
   try {
     const result = await fetchAircraftSnapshot(upstreamUrl, fallbackUrl);
     if (!result.payload) {
