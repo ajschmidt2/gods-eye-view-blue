@@ -39,3 +39,11 @@ For a single-user setup, use Vercel Functions for short-lived stateless API requ
 ## Security
 
 The preview endpoints expose only public data. Personal dashboards should be protected before adding saved locations, private notes, or provider secrets. Use Vercel Deployment Protection or equivalent access controls. Respect USGS feed policies and avoid polling more frequently than necessary.
+
+## Phase 2: US weather alerts and source inventory
+
+- `/api/weather-alerts?area=IN` — active NWS alerts for Indiana; change `IN` to any valid two-letter US state code. No API key. Response is GeoJSON FeatureCollection with metadata and a `count`.
+- `/api/source-status` — machine-readable inventory of configured sources. This is **not** an uptime monitor.
+- The weather endpoint is **not yet rendered as a globe layer**. NWS alerts are US-only, and some alerts lack point or polygon geometry.
+- Validate both endpoints on the latest preview URL before merging. A 502 indicates the upstream request failed or timed out.
+- Aircraft and wildfire integrations are not yet deployed; validate provider terms, rate limits, and response formats before adding them.
