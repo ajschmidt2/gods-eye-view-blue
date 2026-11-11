@@ -3385,5 +3385,7 @@
   "MMSI: {id}": "MMSI: {id}",
   "Vessel UUID: {id}": "船舶UUID: {id}",
   "NWS Weather Alerts (Indiana)": "NWS気象警報（インディアナ州）",
-  "NASA Natural Events": "NASA自然現象"
+  "NASA Natural Events": "NASA自然現象",
+  "NASA EONET unavailable": "NASA EONETを利用できません",
+  "NWS unavailable": "NWSを利用できません"
 }
