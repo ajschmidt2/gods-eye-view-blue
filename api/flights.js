@@ -2,6 +2,34 @@ import { normalizeAdsbLolPointResponse } from '../src/data/adsbLolFallback.js';
 
 const RADIUS_KM = 100;
 const EARTH_RADIUS_KM = 6371.0088;
+const PROVIDER_TIMEOUT_MS = 3800;
+const MAX_ATTEMPTS = 2;
+
+async function fetchAircraftSnapshot(url) {
+  let lastError = 'network';
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'BlueAtlasPersonalDashboard/1.0' },
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        // Rate limits and client errors must not trigger additional requests.
+        if (response.status === 429 || (response.status >= 400 && response.status < 500))
+          return { error: 'upstream_http', status: response.status, attempts: attempt };
+        lastError = 'upstream_http_' + response.status;
+        continue;
+      }
+      const payload = await response.json();
+      if (!Array.isArray(payload?.ac)) return { error: 'invalid_payload', attempts: attempt };
+      return { payload, attempts: attempt };
+    } catch (error) {
+      lastError = error?.name === 'TimeoutError' ? 'timeout' : 'network';
+    }
+  }
+  return { error: lastError, attempts: MAX_ATTEMPTS };
+}
+
 
 function withinRadius(latitude, longitude, centerLat, centerLon) {
   const radians = Math.PI / 180;
@@ -27,13 +55,17 @@ export async function GET(request) {
   // Radius deliberately fixed to limit upstream load and discourage bulk polling.
   const upstreamUrl = `https://api.adsb.lol/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/100`;
   try {
-    const upstream = await fetch(upstreamUrl, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BlueAtlasPersonalDashboard/1.0' },
-      signal: AbortSignal.timeout(8500),
-    });
-    if (!upstream.ok) return Response.json({ error: 'Aircraft provider unavailable', upstreamStatus: upstream.status }, { status: 502 });
-    const payload = await upstream.json();
-    if (!Array.isArray(payload?.ac)) throw new Error('Invalid ADS-B payload');
+    const result = await fetchAircraftSnapshot(upstreamUrl);
+    if (!result.payload) {
+      const timeout = result.error === 'timeout';
+      return Response.json({
+        error: timeout ? 'Aircraft provider timed out' : 'Aircraft provider unavailable',
+        reason: result.error,
+        attempts: result.attempts,
+        ...(result.status ? { upstreamStatus: result.status } : {}),
+      }, { status: timeout ? 504 : 502, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const payload = result.payload;
     const snapshot = normalizeAdsbLolPointResponse(payload);
     // Independently enforce our advertised radius, even if the upstream
     // interprets its point radius differently or returns extra contacts.
@@ -50,6 +82,7 @@ export async function GET(request) {
       headers: {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
         'X-Flight-Source': 'adsb.lol',
+        'X-Flight-Attempts': String(result.attempts),
         'X-Flight-Coverage': '100 km radius around requested point',
         'X-Content-Type-Options': 'nosniff',
       },
