@@ -3466,5 +3466,7 @@
   "Live": "Live",
   "Back to live": "Tillbaka till live",
   "NWS Weather Alerts (Indiana)": "NWS vädervarningar (Indiana)",
-  "NASA Natural Events": "NASA naturhändelser"
+  "NASA Natural Events": "NASA naturhändelser",
+  "NASA EONET unavailable": "NASA EONET är inte tillgängligt",
+  "NWS unavailable": "NWS är inte tillgängligt"
 }
