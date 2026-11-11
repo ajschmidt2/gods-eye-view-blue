@@ -2,6 +2,7 @@ import { GET as earthquakes } from './earthquakes.js';
 import { GET as flights } from './flights.js';
 import { GET as firms } from './firms.js';
 import { GET as weatherAlerts } from './weather-alerts.js';
+import { GET as naturalEvents } from './natural-events.js';
 
 // On-demand operational checks, not a historical uptime monitor.
 // Calling the same handlers as the globe avoids false green configuration-only checks.
@@ -10,6 +11,7 @@ const CHECKS = [
   { id: 'flights', provider: 'adsb.lol', call: () => flights(new Request('https://blue-atlas.invalid/api/flights?lat=39.7684&lon=-86.1581')), freshnessMs: 3 * 60_000 },
   { id: 'wildfires', provider: 'NASA FIRMS', call: () => firms(), freshnessMs: 60 * 60_000 },
   { id: 'weather-alerts', provider: 'NWS', call: () => weatherAlerts(new Request('https://blue-atlas.invalid/api/weather-alerts?area=IN')), freshnessMs: 5 * 60_000 },
+  { id: 'natural-events', provider: 'NASA EONET', call: () => naturalEvents(new Request('https://blue-atlas.invalid/api/natural-events?days=14')), freshnessMs: 15 * 60_000 },
 ];
 
 async function check(item) {
@@ -37,6 +39,9 @@ async function check(item) {
     } else if (item.id === 'wildfires') {
       count = body.count ?? null;
       observationTime = body.fetchedAt ?? null;
+    } else if (item.id === 'natural-events') {
+      count = body.count ?? null;
+      observationTime = Date.parse(body.retrievedAt);
     } else if (item.id === 'weather-alerts') {
       count = body.count ?? null;
       observationTime = Date.parse(body.retrievedAt);
