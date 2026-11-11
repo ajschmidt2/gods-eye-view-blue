@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { msg } from '../../i18n/marker.js';
 
 const CATEGORY_COLORS = Object.freeze({
   Wildfires: Cesium.Color.ORANGERED,
@@ -96,7 +97,7 @@ export function createNasaNaturalEventsLayer() {
         return true;
       } catch (cause) {
         if (!controller.signal.aborted)
-          error = cause?.message || 'NASA EONET unavailable';
+          error = cause?.message || msg('NASA EONET unavailable');
         return false;
       } finally {
         if (request === controller) request = null;
