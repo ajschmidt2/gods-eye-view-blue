@@ -45,7 +45,7 @@ function militaryInstallationsProxy({ hosted = false } = {}) {
     const ql = `[out:json][timeout:20];(nwr["military"~"^(airfield|naval_base|range|barracks|base)$"](${bbox});nwr["landuse"="military"](${bbox}););out center tags geom ${MILITARY_INSTALLATION_ELEMENT_CAP};`;
     const upstream = await fetchOverpassPayload(
       `data=${encodeURIComponent(ql)}`,
-      MILITARY_INSTALLATION_MAX_RESPONSE_BYTES,
+      hosted ? 4_000_000 : MILITARY_INSTALLATION_MAX_RESPONSE_BYTES,
     );
     if (
       upstream.status >= 400 ||
@@ -171,6 +171,9 @@ function militaryInstallationsProxy({ hosted = false } = {}) {
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Cache-Control': 'public, max-age=60',
+          ...(hosted
+            ? { 'Vercel-CDN-Cache-Control': 'public, s-maxage=300' }
+            : {}),
           'X-Military-Installations': preflight.source,
         });
         res.end(
@@ -188,6 +191,9 @@ function militaryInstallationsProxy({ hosted = false } = {}) {
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Cache-Control': 'public, max-age=60',
+          ...(hosted
+            ? { 'Vercel-CDN-Cache-Control': 'public, s-maxage=300' }
+            : {}),
           'X-Military-Installations': request.shared ? 'INFLIGHT' : 'MISS',
         });
         res.end(JSON.stringify(payload));

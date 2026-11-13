@@ -69,3 +69,28 @@ Open `/status.html` on the Preview deployment for a read-only dashboard. `/api/s
 ## NASA EONET natural events
 
 `/api/natural-events?days=14` retrieves open NASA EONET natural events for a bounded 1–30 day lookback, with optional allowlisted `category`. The globe layer `NASA Natural Events` shows reported Point coordinates only; polygon-only observations are omitted rather than assigning misleading centroids. The feed requires no key and is also included in `/api/source-health`. NASA event markers are not real-time emergency warnings.
+
+## Launch Library, Radio Browser, and mapped installations
+
+- Launch Library 2 shares a 15-minute request window and Vercel CDN cache across hosted requests. If the feed fails, the provider marks a retained snapshot stale. The optional `LL2_API_TOKEN` raises the upstream limit.
+- Radio Browser's hosted route uses a fixed HTTPS mirror list. Test `/api/radio/stations` for a station count and the `degraded` field.
+- For detailed OpenStreetMap geometry, set `OVERPASS_UPSTREAMS` on Vercel to the full interpreter URL of an instance you are allowed to use. For low-volume personal use, Private.coffee publishes `https://overpass.private.coffee/api/interpreter`. The map uses OpenStreetMap vector tiles when the detailed endpoint is absent, overloaded, or unreachable.
+
+## Live vessels and traffic
+
+Use one long-running Node process, with a durable state directory, for the AIS WebSocket and TomTom quota. The Vercel API proxies the existing same-origin layer URLs to that service.
+
+On the feed host, install with `npm ci`, then add these values to an untracked `.env.local`:
+
+```dotenv
+BLUE_ATLAS_FEED_TOKEN=<random shared secret>
+BLUE_ATLAS_FEED_STATE_DIR=./.gev-cache
+AISSTREAM_API_KEY=<AISStream key>
+TOMTOM_API_KEY=<TomTom key>
+```
+
+Start it with `node --env-file=.env.local server/standalone/live-feeds.js`. It listens on `127.0.0.1:8787` by default. Expose only this feed process through an HTTPS reverse proxy or authenticated tunnel to a stable hostname. For a container, set `BLUE_ATLAS_FEED_HOST=0.0.0.0` and mount a persistent state directory. Run one replica so it owns one AIS socket and one TomTom quota counter.
+
+In Vercel Preview, set `BLUE_ATLAS_FEED_ORIGIN` to the bare HTTPS origin and set `BLUE_ATLAS_FEED_TOKEN` to the same secret. Keep the preview protected when using the quota-backed feed. Set `AISSTREAM_API_KEY` and `TOMTOM_API_KEY` only on the feed host. Use a provider key or account limit appropriate for your usage.
+
+Verify `/api/vessels` reports `status: "live"` with recent positions in a covered region and `/api/tomtom/status` reports `hasKey: true`. Zoom into a road network and check that the flow tile response is a vector tile and the layer reports live speeds. Keep simulation enabled as the fallback. To use this same-origin setup, remove any old `VITE_AIS_LIVE_API_URL` override.

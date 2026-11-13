@@ -23,6 +23,7 @@ import {
   adaptNodeProvider,
   sendProviderJson,
 } from '../server/vercel/node-provider-adapter.js';
+import { proxyLiveFeed } from '../server/vercel/live-feed-proxy.js';
 
 const satellites = celestrakProxy({
   cacheDir: null,
@@ -54,7 +55,7 @@ const routes = new Map([
         keyed: createKeyedNews({ env: () => ({}), requestDriven: true }),
       }),
   ],
-  ['/api/radio', radioBrowserProxy],
+  ['/api/radio', () => radioBrowserProxy({ hosted: true })],
   ['/api/shipwrecks', shipwrecksProxy],
   ['/api/transit', transitProxy],
   ['/api/weather', () => weatherProxy({ maxImageBytes: 4_000_000 })],
@@ -76,28 +77,8 @@ export default async function handler(req, res) {
       return sendProviderJson(res, 404, { error: 'unknown_provider' });
     }
 
-    if (
-      provider === 'vessels' &&
-      ['', '/', '/track'].includes(url.pathname.slice('/api/vessels'.length))
-    ) {
-      return sendProviderJson(res, 503, {
-        rows: [],
-        status: 'unsupported',
-        error:
-          'Live AIS requires a persistent snapshot server. Set VITE_AIS_LIVE_API_URL to its read endpoint.',
-      });
-    }
-    if (url.pathname === '/api/tomtom/status') {
-      return sendProviderJson(res, 200, {
-        hasKey: false,
-        reason: 'Live TomTom tiles require a persistent quota counter.',
-      });
-    }
-    if (provider === 'tomtom' && subroute === 'flow') {
-      return sendProviderJson(res, 503, {
-        error: 'traffic_backend_unavailable',
-      });
-    }
+    if (provider === 'vessels' || provider === 'tomtom')
+      return await proxyLiveFeed(req, res, url);
 
     const root = '/api/' + provider;
     const child = root + '/' + subroute;
