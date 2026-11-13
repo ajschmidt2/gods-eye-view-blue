@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci && node scripts/stage-vercel-wind.mjs",
+  "functions": {
+    "api/provider.js": {
+      "maxDuration": 120,
+      "includeFiles": "server/vercel/assets/eccodes-binary.cjs"
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    {
+      "src": "^/api/((?:celestrak(?:-satcat)?|cyclones|drone-airspace|fire-perimeters|gbfs|ghostmaps|gnss-integrity|inaturalist|launches|military(?:-installations)?|news|radio|shipwrecks|tomtom|transit|vessels|weather|wind)(?:/.*)?)$",
+      "dest": "/api/provider?__blue_atlas_path=$1"
+    }
+  ]
+}

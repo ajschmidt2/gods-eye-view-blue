@@ -243,3 +243,22 @@ test('wind source retains usable wind when the requested scalar is unavailable',
     assert.deepEqual([...result.v], [3, 4]);
   }
 });
+
+test('an inline wind grid works without a second function request', async () => {
+  const grid = Float32Array.from([1, 2, 3, 4]);
+  let calls = 0;
+  const source = createWindSource({
+    fetchImpl: async () => {
+      calls++;
+      return response({
+        model: 'gfs',
+        grid: manifest.grid,
+        gridData: Buffer.from(grid.buffer).toString('base64'),
+      });
+    },
+  });
+  const field = await source.getSnapshot();
+  assert.deepEqual([...field.u], [1, 2]);
+  assert.deepEqual([...field.v], [3, 4]);
+  assert.equal(calls, 1);
+});

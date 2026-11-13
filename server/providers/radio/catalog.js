@@ -79,6 +79,7 @@ export function createRadioProxyMiddleware({
   lookupImpl = lookupDns,
   now = Date.now,
   priorityCountries = [],
+  hosted = false,
 } = {}) {
   const countries = parseRadioPriorityCountries(priorityCountries);
   let mirrorCache = { origins: [...RADIO_FALLBACK_MIRRORS], cachedAt: 0 };
@@ -103,18 +104,20 @@ export function createRadioProxyMiddleware({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), RADIO_FETCH_TIMEOUT_MS);
     try {
-      const addresses = await resolveRadioProxyAddresses(
-        destination.hostname,
-        lookupImpl,
-      );
       const options = {
         headers: { Accept: 'application/json', 'User-Agent': RADIO_USER_AGENT },
         signal: controller.signal,
         redirect: 'manual',
       };
-      const response = fetchImpl
-        ? await fetchImpl(destination.href, options)
-        : await fetchPinnedRadioResponse(destination, options, addresses);
+      // Hosted mode uses a fixed list of upstreams over standard HTTPS. Local
+      // discovery continues to validate and pin the addresses it resolves.
+      const addresses = hosted
+        ? null
+        : await resolveRadioProxyAddresses(destination.hostname, lookupImpl);
+      const response =
+        hosted || fetchImpl
+          ? await (fetchImpl ?? fetch)(destination.href, options)
+          : await fetchPinnedRadioResponse(destination, options, addresses);
       if (response.status >= 300 && response.status < 400) {
         try {
           await response.body?.cancel?.();
@@ -133,6 +136,12 @@ export function createRadioProxyMiddleware({
   }
 
   async function mirrors() {
+    if (hosted)
+      return [
+        'https://de1.api.radio-browser.info',
+        'https://all.api.radio-browser.info',
+        'https://de2.api.radio-browser.info',
+      ];
     if (now() - mirrorCache.cachedAt < RADIO_MIRROR_CACHE_MS)
       return mirrorCache.origins;
     if (!mirrorPromise) {

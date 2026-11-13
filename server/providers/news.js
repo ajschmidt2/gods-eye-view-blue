@@ -1,6 +1,6 @@
 import { newsQueryAllowed } from '../../src/layers/news/source.js';
 import { readResponseTextCapped } from './common/http.js';
-import { sameSiteGated } from './common/same-site.js';
+import { admitSameSiteKeyless, sameSiteGated } from './common/same-site.js';
 import { createKeyedNews } from './news/keyed.js';
 
 // News (/api/news/*). With GEV_NEWS_ORIGIN set (a news server such as
@@ -96,6 +96,7 @@ export function newsProxy({
   fetchImpl = (...args) => globalThis.fetch(...args),
   timeoutMs = TIMEOUT_MS,
   builtIn = true,
+  hosted = false,
   keyed = builtIn ? createKeyedNews({ env, fetchImpl, log }) : null,
 } = {}) {
   const json = (res, status, value) => {
@@ -178,7 +179,10 @@ export function newsProxy({
 
   // The routes spend keys and upstream reads: no other site's page, and no
   // proxied request, may drive them (SECURITY.md, cross-site gate).
-  const gated = sameSiteGated(handler);
+  const gated = sameSiteGated(
+    handler,
+    hosted ? admitSameSiteKeyless : undefined,
+  );
   return {
     name: 'news',
     configureServer({ middlewares }) {

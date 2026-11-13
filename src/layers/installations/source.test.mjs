@@ -265,3 +265,23 @@ test('installation API transports never receive vector-tile URLs', async (t) => 
   }
   assert.ok(calls.length >= 4);
 });
+
+test('a failed detailed map request falls back to vector tiles and the next request can recover', async () => {
+  let requests = 0;
+  const source = createInstallationSource({
+    fetchImpl: async () =>
+      ++requests === 1
+        ? new Response('Upstream unavailable', { status: 503 })
+        : Response.json({ elements: [], status: 'ready' }),
+    loadNames: async () => [],
+    mapTiles: {
+      async fetchBounds() {
+        return { tiles: [], partial: false };
+      },
+      clear() {},
+    },
+  });
+  assert.equal((await source.getMappedSites(box)).tileSource, true);
+  assert.equal((await source.getMappedSites(box)).tileSource, undefined);
+  assert.equal(requests, 2);
+});

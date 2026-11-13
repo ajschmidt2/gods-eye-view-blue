@@ -282,6 +282,7 @@ export function createKeyedNews({
   log = (message) => console.warn(message),
   later = (run, ms) => setTimeout(run, ms).unref(),
   firstAnswerMs = FIRST_ANSWER_MS,
+  requestDriven = false,
 } = {}) {
   const keyOf = (id) => String(env()[NEWS_KEYS[id]] ?? '').trim();
   const inFlight = new Map();
@@ -539,7 +540,8 @@ export function createKeyedNews({
     const newest = new Set(day.slice(0, GDELT_TITLED_EXPORTS));
     const wanted = (url) =>
       listed(url) && !gdelt.read.has(url) && !gdelt.gone.has(url);
-    const missing = day.filter(wanted).slice(0, GDELT_EXPORTS_PER_READ);
+    const batchSize = requestDriven ? GDELT_PARALLEL : GDELT_EXPORTS_PER_READ;
+    const missing = day.filter(wanted).slice(0, batchSize);
     let failed = null;
     let added = 0;
     const failing = [];
@@ -601,9 +603,7 @@ export function createKeyedNews({
       if (!kept.has(url)) gdelt.failures.delete(url);
     for (const url of gdelt.untitled.keys())
       if (!newest.has(url)) gdelt.untitled.delete(url);
-    return (
-      added > 0 && missing.length === GDELT_EXPORTS_PER_READ && day.some(wanted)
-    );
+    return added > 0 && missing.length === batchSize && day.some(wanted);
   }
 
   /** GDELT's reports of the last day, newest first, or `{failed}`. */
@@ -619,7 +619,7 @@ export function createKeyedNews({
             // the answer.
             if (!more) return;
             gdelt.checkedAt = null;
-            later(() => void gdeltReports(), GDELT_NEXT_MS);
+            if (!requestDriven) later(() => void gdeltReports(), GDELT_NEXT_MS);
           },
           (error) => {
             log(`[news] gdelt read failed: ${error.message}`);
@@ -628,7 +628,7 @@ export function createKeyedNews({
         )
         .finally(() => {
           inFlight.delete('gdelt');
-          void readTitles();
+          if (!requestDriven) void readTitles();
         });
       inFlight.set('gdelt', round);
     }
@@ -638,8 +638,9 @@ export function createKeyedNews({
       gdelt.readAt !== null && now() - gdelt.readAt < GDELT_STALE_MS;
     // A slow GDELT must not outlast the browser's own timeout: what has come
     // in by then is served.
-    if (!current() && inFlight.has('gdelt'))
-      await firstAnswer(inFlight.get('gdelt'));
+    const refresh = inFlight.get('gdelt');
+    if (refresh && requestDriven) await refresh;
+    else if (refresh && !current()) await firstAnswer(refresh);
     if (!current()) return { failed: true };
     const dayAgo = new Date(now() - DAY_MS).toISOString();
     // Exports are read in parallel, so reports of one time arrive in any

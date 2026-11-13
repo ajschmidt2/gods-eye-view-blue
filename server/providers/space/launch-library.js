@@ -21,9 +21,9 @@ export function launchLibraryRequestHeaders(token = process.env.LL2_API_TOKEN) {
 }
 
 /** Proxy the public Launch Library 2 recent-launch feed server-side. */
-export function rocketLaunchesProxy() {
+export function rocketLaunchesProxy({ diskCache = true } = {}) {
   const ttlMs = LL2_CACHE_TTL_MS;
-  const maxResponseBytes = 12 * 1024 * 1024;
+  const maxResponseBytes = diskCache ? 12 * 1024 * 1024 : 4_000_000;
   const maxDiskCacheBytes = 24 * 1024 * 1024;
   const cachePath = path.join(
     process.cwd(),
@@ -33,12 +33,11 @@ export function rocketLaunchesProxy() {
   let cache = null;
   let cooldownUntil = 0;
   let cooldownStatus = 502;
-  let diskLoaded = false;
+  let diskLoad;
   const inFlight = new Map();
 
   async function loadDiskCache() {
-    if (diskLoaded) return;
-    diskLoaded = true;
+    if (!diskCache) return;
     try {
       const stat = await fsp.stat(cachePath);
       if (stat.size > maxDiskCacheBytes)
@@ -69,6 +68,9 @@ export function rocketLaunchesProxy() {
         status === 200 && cacheState !== 'STALE-ERROR'
           ? 'public, max-age=900'
           : 'no-store',
+      ...(!diskCache && status === 200 && cacheState !== 'STALE-ERROR'
+        ? { 'Vercel-CDN-Cache-Control': 'public, s-maxage=900' }
+        : {}),
       ...(cache ? { 'X-GEV-Cached-At': new Date(cache.at).toISOString() } : {}),
       ...(Date.now() < cooldownUntil
         ? {
@@ -84,9 +86,15 @@ export function rocketLaunchesProxy() {
 
   async function refreshUpstream() {
     const end = new Date();
-    const url = launchLibraryRecentUrl(end);
+    // A fixed interval keeps distributed cold starts on the same upstream URL.
+    const bucket = diskCache
+      ? end
+      : new Date(Math.floor(end.getTime() / ttlMs) * ttlMs);
+    const url = launchLibraryRecentUrl(bucket);
+    const signal = AbortSignal.timeout(diskCache ? 20_000 : 32_000);
     const upstream = await fetch(url, {
-      signal: AbortSignal.timeout(20000),
+      signal,
+      redirect: 'error',
       headers: launchLibraryRequestHeaders(),
     });
     if (!upstream.ok) {
@@ -101,14 +109,18 @@ export function rocketLaunchesProxy() {
       error.upstreamStatus = upstream.status;
       throw error;
     }
-    const body = await readResponseTextCapped(upstream, maxResponseBytes);
+    const body = await readResponseTextCapped(
+      upstream,
+      maxResponseBytes,
+      signal,
+    );
     const parsed = JSON.parse(body);
     if (!Array.isArray(parsed?.results))
       throw new Error('malformed upstream response');
     const fresh = { at: Date.now(), body };
     cache = fresh;
     cooldownUntil = 0;
-    void saveDiskCache(fresh);
+    if (diskCache) void saveDiskCache(fresh);
     return fresh;
   }
 
@@ -118,7 +130,7 @@ export function rocketLaunchesProxy() {
         send(res, 405, JSON.stringify({ error: 'Method Not Allowed' }), 'NONE');
         return;
       }
-      await loadDiskCache();
+      await (diskLoad ??= loadDiskCache());
       const now = Date.now();
       if (cache && now - cache.at < ttlMs) {
         send(res, 200, cache.body, 'HIT');

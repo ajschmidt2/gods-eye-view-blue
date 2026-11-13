@@ -16,6 +16,7 @@ export function windProxy({
   ttlMs = 3600_000,
   timeoutMs = 40_000,
   models = { gfs: fetchGfsWind, ifs: fetchIfsWind },
+  inlineGrid = false,
 } = {}) {
   // Request validation limits these maps to 2 models × 3 overlays.
   const caches = new Map();
@@ -39,6 +40,14 @@ export function windProxy({
     });
     res.end(JSON.stringify(value));
   };
+  function gridBytes({ grid, manifest }) {
+    const components = [grid.u, grid.v, ...(grid.scalar ? [grid.scalar] : [])];
+    return Buffer.concat(
+      components.map((values) =>
+        Buffer.from(values.buffer, values.byteOffset, values.byteLength),
+      ),
+    );
+  }
   function refresh(model, overlay, key) {
     const controller = new AbortController();
     const operation = { controller, waiters: 0, promise: null };
@@ -172,16 +181,7 @@ export function windProxy({
       const state =
         url.pathname === `/grid/${id}.bin` && grids.get(key)?.get(id);
       if (!state) return sendJson(res, { error: 'unknown_grid' }, 404);
-      const components = [
-        state.grid.u,
-        state.grid.v,
-        ...(state.grid.scalar ? [state.grid.scalar] : []),
-      ];
-      const bytes = Buffer.concat(
-        components.map((values) =>
-          Buffer.from(values.buffer, values.byteOffset, values.byteLength),
-        ),
-      );
+      const bytes = gridBytes(state);
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Cache-Control': 'public, max-age=3600, immutable',
@@ -216,6 +216,13 @@ export function windProxy({
     if (url.pathname === '/status') {
       const { gridUrl, ...status } = manifest;
       return sendJson(res, status);
+    }
+    if (inlineGrid && state?.grid) {
+      const { gridUrl, ...snapshot } = manifest;
+      return sendJson(res, {
+        ...snapshot,
+        gridData: gridBytes(state).toString('base64'),
+      });
     }
     return sendJson(res, manifest);
   };
