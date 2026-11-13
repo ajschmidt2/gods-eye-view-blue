@@ -131,6 +131,7 @@ export function createGhostMapsWatcher({
   }
 
   async function loadDisk() {
+    if (!cacheDir) return;
     if (diskLoaded) return;
     diskLoaded = true;
     try {
@@ -145,6 +146,7 @@ export function createGhostMapsWatcher({
   }
 
   async function saveDisk() {
+    if (!cacheDir) return;
     try {
       await fsp.mkdir(cacheDir, { recursive: true });
       const { commit, committedAt, message, products, changedAt } = state;
@@ -199,8 +201,10 @@ export function createGhostMapsWatcher({
     await saveDisk();
     emit();
     // Warm the default products so the first browser load is local.
-    for (const product of state.products)
-      if (product.defaultOn) file(product.id).catch(() => {});
+    if (cacheDir) {
+      for (const product of state.products)
+        if (product.defaultOn) file(product.id).catch(() => {});
+    }
     return true;
   }
 
@@ -349,13 +353,24 @@ export function createGhostMapsWatcher({
     checkNow,
     catalog: publicCatalog,
     file,
+    downloadUrl(id, version) {
+      const product = state.products.find(
+        (entry) => entry.id === id && entry.version === version,
+      );
+      return product && ghostMapsRawUrl(state.commit, product.path);
+    },
     subscribe,
     subscribers: () => listeners.size,
   };
 }
 
 /** Same-origin GhostMaps routes for dev and preview. */
-export function ghostMapsProxy({ watcher = createGhostMapsWatcher() } = {}) {
+export function ghostMapsProxy({
+  onDemand = false,
+  watcher = createGhostMapsWatcher(
+    onDemand ? { cacheDir: null, pollMs: 300_000 } : {},
+  ),
+} = {}) {
   const json = (res, status, value) => {
     if (res.destroyed) return;
     res.writeHead(status, {
@@ -397,6 +412,27 @@ export function ghostMapsProxy({ watcher = createGhostMapsWatcher() } = {}) {
     const match = /^\/file\/([a-z0-9-]{1,40})$/.exec(url.pathname);
     if (!['/catalog', '/events'].includes(url.pathname) && !match)
       return json(res, 404, { error: 'unknown_route' });
+    if (onDemand) {
+      if (url.pathname === '/events') {
+        res.writeHead(204, { 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      let catalog = watcher.catalog();
+      if (
+        !catalog.checkedAt ||
+        Date.now() - catalog.checkedAt >= catalog.pollMs
+      ) {
+        await watcher.checkNow();
+        catalog = watcher.catalog();
+      }
+      if (url.pathname === '/catalog') {
+        return json(res, 200, { ...catalog, updateMode: 'polling' });
+      }
+      const target = watcher.downloadUrl(match[1], url.searchParams.get('v'));
+      if (!target) return json(res, 404, { error: 'unknown_product_version' });
+      res.writeHead(302, { Location: target, 'Cache-Control': 'no-store' });
+      return res.end();
+    }
     // Watching starts with the first request, so an install that never turns
     // the layer on never contacts GitHub.
     const first = watcher.start();

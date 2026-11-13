@@ -1,5 +1,5 @@
 import { makeRateLimiter, clientKey } from './common/rate-limit.js';
-import { admitSameSite } from './common/same-site.js';
+import { admitSameSite, admitSameSiteKeyless } from './common/same-site.js';
 import {
   MILITARY_INSTALLATION_ELEMENT_CAP,
   MILITARY_INSTALLATION_MAX_RESPONSE_BYTES,
@@ -37,7 +37,9 @@ const _militaryInstallationsRateLimiter = makeRateLimiter({
 
 const _militaryInstallationInFlight = new Map();
 
-function militaryInstallationsProxy() {
+function militaryInstallationsProxy({ hosted = false } = {}) {
+  const admit = hosted ? admitSameSiteKeyless : admitSameSite;
+  const readDisk = hosted ? async () => null : readMilitaryInstallationDisk;
   async function refresh(box, key) {
     const bbox = `${box.south},${box.west},${box.north},${box.east}`;
     const ql = `[out:json][timeout:20];(nwr["military"~"^(airfield|naval_base|range|barracks|base)$"](${bbox});nwr["landuse"="military"](${bbox}););out center tags geom ${MILITARY_INSTALLATION_ELEMENT_CAP};`;
@@ -87,7 +89,7 @@ function militaryInstallationsProxy() {
     };
     _militaryInstallationCache.set(key, entry);
     trimMilitaryInstallationCache();
-    writeMilitaryInstallationDisk(key, entry);
+    if (!hosted) writeMilitaryInstallationDisk(key, entry);
     return payload;
   }
 
@@ -98,7 +100,7 @@ function militaryInstallationsProxy() {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return;
       }
-      if (admitSameSite(req, res)) return;
+      if (admit(req, res)) return;
       const url = new URL(req.url, 'http://localhost');
       const requested = validMilitaryInstallationBox(url.searchParams);
       if (!requested) {
@@ -126,8 +128,7 @@ function militaryInstallationsProxy() {
       const now = Date.now();
       const cached = _militaryInstallationCache.get(key);
       if (!resolveOverpassUpstreams().length) {
-        const stale =
-          cached || (await readMilitaryInstallationDisk(key, Infinity));
+        const stale = cached || (await readDisk(key, Infinity));
         const disabled = overpassNotConfigured();
         res.writeHead(200, {
           'Content-Type': 'application/json',
@@ -159,8 +160,7 @@ function militaryInstallationsProxy() {
         cacheKey: key,
         memoryCache: _militaryInstallationCache,
         inFlight: _militaryInstallationInFlight,
-        readDisk: () =>
-          readMilitaryInstallationDisk(key, MILITARY_INSTALLATION_DISK_TTL_MS),
+        readDisk: () => readDisk(key, MILITARY_INSTALLATION_DISK_TTL_MS),
         now,
       });
       if (preflight.source !== 'UPSTREAM') {
@@ -203,7 +203,7 @@ function militaryInstallationsProxy() {
         }
         // Overpass is down: last-good mapped context at ANY age beats an empty
         // layer (the same serve-stale rule the Overpass proxy applies).
-        const stale = await readMilitaryInstallationDisk(key, Infinity);
+        const stale = await readDisk(key, Infinity);
         if (stale) {
           res.writeHead(200, {
             'Content-Type': 'application/json',

@@ -1,4 +1,12 @@
-/** Bridge the existing Node middleware providers to Vercel functions. */
+export function sendProviderJson(res, status, value) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+  });
+  res.end(JSON.stringify(value));
+}
+
+/** Bridge a Vite middleware mount to a Vercel function. */
 export function adaptNodeProvider(provider, prefix) {
   let handler;
   provider.configureServer({
@@ -9,17 +17,17 @@ export function adaptNodeProvider(provider, prefix) {
     },
   });
   if (!handler) throw new Error('Provider did not register its route');
-  return async function handle(req, res) {
+  return async function handle(req, res, url) {
     const originalUrl = req.url;
-    const url = new URL(req.url || '/', 'https://blueatlas.invalid');
     if (url.pathname !== prefix && !url.pathname.startsWith(prefix + '/')) {
-      res.statusCode = 404;
-      res.end(JSON.stringify({ error: 'unknown_route' }));
-      return;
+      return sendProviderJson(res, 404, { error: 'unknown_route' });
     }
-    req.url = url.pathname.slice(prefix.length) + url.search || '/';
+    const pathname = url.pathname.slice(prefix.length) || '/';
+    req.url = pathname + url.search;
     try {
-      await handler(req, res);
+      await handler(req, res, () =>
+        sendProviderJson(res, 404, { error: 'unknown_route' }),
+      );
     } finally {
       req.url = originalUrl;
     }

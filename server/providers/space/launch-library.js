@@ -21,9 +21,9 @@ export function launchLibraryRequestHeaders(token = process.env.LL2_API_TOKEN) {
 }
 
 /** Proxy the public Launch Library 2 recent-launch feed server-side. */
-export function rocketLaunchesProxy() {
+export function rocketLaunchesProxy({ diskCache = true } = {}) {
   const ttlMs = LL2_CACHE_TTL_MS;
-  const maxResponseBytes = 12 * 1024 * 1024;
+  const maxResponseBytes = diskCache ? 12 * 1024 * 1024 : 4_000_000;
   const maxDiskCacheBytes = 24 * 1024 * 1024;
   const cachePath = path.join(
     process.cwd(),
@@ -37,7 +37,7 @@ export function rocketLaunchesProxy() {
   const inFlight = new Map();
 
   async function loadDiskCache() {
-    if (diskLoaded) return;
+    if (!diskCache || diskLoaded) return;
     diskLoaded = true;
     try {
       const stat = await fsp.stat(cachePath);
@@ -108,7 +108,7 @@ export function rocketLaunchesProxy() {
     const fresh = { at: Date.now(), body };
     cache = fresh;
     cooldownUntil = 0;
-    void saveDiskCache(fresh);
+    if (diskCache) void saveDiskCache(fresh);
     return fresh;
   }
 
