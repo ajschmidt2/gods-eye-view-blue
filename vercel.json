@@ -11,7 +11,7 @@
   "routes": [
     { "handle": "filesystem" },
     {
-      "src": "^/api/((?:celestrak(?:-satcat)?|cyclones|drone-airspace|fire-perimeters|gbfs|ghostmaps|gnss-integrity|inaturalist|launches|military(?:-installations)?|news|radio|shipwrecks|tomtom|transit|vessels|weather|wind)(?:/.*)?)$",
+      "src": "^/api/((?:celestrak(?:-satcat)?|cyclones|drone-airspace|fire-perimeters|gbfs|gemini|ghostmaps|gnss-integrity|inaturalist|launches|military(?:-installations)?|news|radio|shipwrecks|tomtom|transit|vessels|weather|wind)(?:/.*)?)$",
       "dest": "/api/provider?__blue_atlas_path=$1"
     }
   ]

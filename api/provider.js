@@ -1,3 +1,4 @@
+import { geminiPreviewChat } from '../server/vercel/gemini-preview-chat.js';
 import { adsbLolProxy } from '../server/providers/aircraft/adsb-lol.js';
 import { trackBackfillProxies } from '../server/providers/aircraft/tracks.js';
 import { cycloneProxy } from '../server/providers/cyclones.js';
@@ -76,6 +77,9 @@ export default async function handler(req, res) {
     if (api !== 'api') {
       return sendProviderJson(res, 404, { error: 'unknown_provider' });
     }
+
+    if (url.pathname === '/api/gemini/chat')
+      return await geminiPreviewChat(req, res);
 
     if (provider === 'vessels' || provider === 'tomtom')
       return await proxyLiveFeed(req, res, url);
