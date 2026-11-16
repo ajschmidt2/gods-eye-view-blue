@@ -35,9 +35,9 @@ export function admitSameSite(req, res) {
  * @param {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next?: Function) => unknown} handler
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next?: Function) => unknown}
  */
-export function sameSiteGated(handler) {
+export function sameSiteGated(handler, admit = admitSameSite) {
   return (req, res, next) => {
-    if (admitSameSite(req, res)) return undefined;
+    if (admit(req, res)) return undefined;
     return handler(req, res, next);
   };
 }

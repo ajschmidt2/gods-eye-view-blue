@@ -209,15 +209,26 @@ export function createInstallationSource({
         ]),
       );
       if (exact) query.set('exact', '1');
-      const response = await fetchImpl(`/api/military-installations?${query}`, {
-        signal,
+      let response;
+      try {
+        response = await fetchImpl(`/api/military-installations?${query}`, {
+          signal,
+        });
+      } catch (error) {
+        if (signal?.aborted || error?.name === 'AbortError') throw error;
+        return getTileSites(box, signal, thinned);
+      }
+      const retryable = [429, 502, 503, 504].includes(response.status);
+      const body = await response.json().catch((error) => {
+        if (!retryable) throw error;
+        return null;
       });
-      const body = await response.json();
       signal?.throwIfAborted();
       if (isUnavailableCapability(body)) {
         overpassUnavailable = true;
         return getTileSites(box, signal, thinned);
       }
+      if (retryable) return getTileSites(box, signal, thinned);
       if (!response.ok)
         throw Object.assign(
           sourceResponseError(

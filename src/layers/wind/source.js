@@ -35,12 +35,13 @@ export function createWindSource({
         if (!response.ok) throw new Error(`Wind HTTP ${response.status}`);
         const manifest = JSON.parse(
           new TextDecoder().decode(
-            await readWindBody(response, 16_384, active),
+            await readWindBody(response, 4_000_000, active),
           ),
         );
         if (manifest?.unavailable) return manifest;
         const grid = manifest?.grid;
         const scalar = manifest?.scalar;
+        const inline = typeof manifest?.gridData === 'string';
         const scalarError = manifest?.scalarError;
         const optionalUnavailable =
           overlay !== 'none' &&
@@ -71,27 +72,38 @@ export function createWindSource({
           grid.dx <= 0 ||
           grid.dy <= 0 ||
           Math.abs(grid.nx * grid.dx - 360) > 0.01 ||
-          !new RegExp(
-            `^/api/wind/grid/${model}-[\\w.-]+\\.bin\\?${query}$`,
-          ).test(manifest.gridUrl)
+          (!inline &&
+            !new RegExp(
+              `^/api/wind/grid/${model}-[\\w.-]+\\.bin\\?${query}$`,
+            ).test(manifest.gridUrl))
         )
           throw new Error(msg('Malformed wind manifest'));
         const count = grid.nx * grid.ny;
         const expectedBytes = count * (scalar ? 12 : 8);
-        const gridResponse = await fetchImpl(manifest.gridUrl, {
-          signal: active,
-          redirect: 'error',
-        });
-        if (!gridResponse.ok)
-          throw new Error(`Wind HTTP ${gridResponse.status}`);
-        const bytes = await readWindBody(gridResponse, expectedBytes, active);
+        let bytes;
+        if (inline) {
+          if (manifest.gridData.length !== Math.ceil(expectedBytes / 3) * 4)
+            throw new Error(msg('Malformed wind grid'));
+          bytes = Uint8Array.from(atob(manifest.gridData), (char) =>
+            char.charCodeAt(0),
+          );
+        } else {
+          const gridResponse = await fetchImpl(manifest.gridUrl, {
+            signal: active,
+            redirect: 'error',
+          });
+          if (!gridResponse.ok)
+            throw new Error(`Wind HTTP ${gridResponse.status}`);
+          bytes = await readWindBody(gridResponse, expectedBytes, active);
+        }
         if (bytes.byteLength !== expectedBytes)
           throw new Error(msg('Malformed wind grid'));
         const values = new Float32Array(bytes.buffer);
         if (!values.every(Number.isFinite))
           throw new Error(msg('Malformed wind grid'));
+        const { gridData, ...snapshot } = manifest;
         return {
-          ...manifest,
+          ...snapshot,
           u: values.slice(0, count),
           v: values.slice(count, count * 2),
           ...(scalar

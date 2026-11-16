@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 
@@ -49,16 +50,22 @@ import { admitSameSite } from './common/same-site.js';
  *
  * @returns {import('vite').Plugin}
  */
-export function tomtomProxy() {
+export function tomtomProxy({ trustedServer = false } = {}) {
   const TILE_TTL_MS = 120_000;
-  const CACHE_DIR = path.join(process.cwd(), '.gev-cache', 'tomtom');
+  const CACHE_DIR = path.join(
+    process.env.BLUE_ATLAS_FEED_STATE_DIR ||
+      path.join(process.cwd(), '.gev-cache'),
+    'tomtom',
+  );
   const BUDGET_PATH = path.join(CACHE_DIR, 'budget.json');
   // 200,000/month free tier / 31 days = 6,451. Rounded down for headroom.
   const DEFAULT_DAILY_BUDGET = 6000;
   const MEM_MAX_ENTRIES = 256;
   const UPSTREAM_TIMEOUT_MS = 15000;
   /** Flow tiles are well under 1 MB; this bounds a runaway body, not a budget. */
-  const TOMTOM_TILE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+  const TOMTOM_TILE_MAX_RESPONSE_BYTES = trustedServer
+    ? 4_000_000
+    : 8 * 1024 * 1024;
 
   /** @type {Map<string, {at:number, buf:Buffer}>} tile key `z/x/y` -> cached tile (kept past TTL for serve-stale). */
   const mem = new Map();
@@ -67,7 +74,8 @@ export function tomtomProxy() {
 
   /** @type {{date:string, count:number}|null} lazily-loaded persistent counter. */
   let budget = null;
-  let budgetLoaded = false;
+  let budgetLoad;
+  let budgetWrites = Promise.resolve();
 
   function dailyBudgetLimit() {
     const raw = Number.parseInt(process.env.TOMTOM_DAILY_TILE_BUDGET || '', 10);
@@ -75,28 +83,33 @@ export function tomtomProxy() {
   }
 
   async function loadBudgetOnce() {
-    if (budgetLoaded) return;
-    budgetLoaded = true;
     try {
       const parsed = JSON.parse(await fsp.readFile(BUDGET_PATH, 'utf8'));
       if (
         parsed &&
-        typeof parsed.date === 'string' &&
-        Number.isFinite(parsed.count)
+        /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) &&
+        Number.isSafeInteger(parsed.count) &&
+        parsed.count >= 0
       ) {
         budget = parsed;
+      } else if (trustedServer) {
+        throw new Error('Invalid traffic quota file');
       }
-    } catch {
-      /* no budget file yet */
+    } catch (error) {
+      if (trustedServer && error?.code !== 'ENOENT') throw error;
     }
   }
 
-  async function persistBudget() {
+  async function persistBudget(snapshot) {
+    const temporary = BUDGET_PATH + '.' + randomUUID() + '.tmp';
     try {
       await fsp.mkdir(CACHE_DIR, { recursive: true });
-      await fsp.writeFile(BUDGET_PATH, JSON.stringify(budget), 'utf8');
-    } catch (err) {
-      console.warn('[tomtom-proxy] budget write failed:', err?.message || err);
+      await fsp.writeFile(temporary, JSON.stringify(snapshot), 'utf8');
+      await fsp.rename(temporary, BUDGET_PATH);
+    } catch (error) {
+      await fsp.rm(temporary, { force: true }).catch(() => {});
+      if (trustedServer) throw error;
+      console.warn('[tomtom-proxy] budget write failed');
     }
   }
 
@@ -106,10 +119,15 @@ export function tomtomProxy() {
     return budget;
   }
 
-  /** Count one upstream fetch attempt against today's budget (async persist). */
-  function recordUpstreamFetch() {
-    currentBudget().count += 1;
-    void persistBudget();
+  /** Reserve each upstream attempt before sending it. Serialize disk writes
+   * so an older snapshot can never overwrite a newer quota count. */
+  async function recordUpstreamFetch() {
+    const entry = currentBudget();
+    entry.count += 1;
+    const snapshot = { ...entry };
+    const write = budgetWrites.then(() => persistBudget(snapshot));
+    budgetWrites = write.catch(() => {});
+    await write;
   }
 
   const tilePath = (key) =>
@@ -153,9 +171,9 @@ export function tomtomProxy() {
     const url =
       'https://api.tomtom.com/traffic/map/4/tile/flow/relative/' +
       `${z}/${x}/${y}.pbf?key=${encodeURIComponent(process.env.TOMTOM_API_KEY)}`;
-    recordUpstreamFetch(); // attempts count — upstream bills the request either way
+    await recordUpstreamFetch();
     const signal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
-    const res = await fetch(url, { signal });
+    const res = await fetch(url, { signal, redirect: 'error' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const bytes = await readResponseBytesCapped(
       res,
@@ -170,7 +188,7 @@ export function tomtomProxy() {
   const installMiddleware = (server) => {
     server.middlewares.use('/api/tomtom', async (req, res) => {
       // Gate first: a cross-site <img>/fetch must not reach the budget counter.
-      if (admitSameSite(req, res)) return;
+      if (!trustedServer && admitSameSite(req, res)) return;
       // Sanitized responses only (proxy/security baseline): no upstream
       // error details, and never echo the key or the upstream URL.
       const sendJson = (status, obj, extraHeaders = {}) => {
@@ -196,7 +214,7 @@ export function tomtomProxy() {
       };
 
       try {
-        await loadBudgetOnce();
+        await (budgetLoad ??= loadBudgetOnce());
         const urlPath = String(req.url || '').split('?')[0];
 
         if (urlPath === '/status') {
@@ -242,18 +260,13 @@ export function tomtomProxy() {
           return;
         }
 
-        // Budget governor: over the soft cap, last-good data beats a dead layer.
-        if (isTomTomOverBudget(currentBudget(), dailyBudgetLimit())) {
-          if (entry) {
-            sendTile(entry, 'STALE-BUDGET');
-          } else {
-            sendJson(429, { error: 'budget' });
-          }
-          return;
-        }
-
         // Stale or missing → refresh, single-flight per tile.
         if (!inflight.has(key)) {
+          if (isTomTomOverBudget(currentBudget(), dailyBudgetLimit())) {
+            if (entry) sendTile(entry, 'STALE-BUDGET');
+            else sendJson(429, { error: 'budget' });
+            return;
+          }
           inflight.set(
             key,
             fetchUpstream(z, x, y)

@@ -239,6 +239,7 @@ export function weatherProxy({
   fetchImpl = fetch,
   now = () => Date.now(),
   timeoutMs = 12_000,
+  maxImageBytes = MAX_IMAGE_BYTES,
 } = {}) {
   const metadata = new Map();
   const attempts = new Map();
@@ -525,9 +526,12 @@ export function weatherProxy({
       const imageShape = {
         width,
         height,
-        maxBytes: wholeImage
-          ? MAX_IMAGE_BYTES
-          : Math.max(1024 * 1024, width ** 2 * 4 + 65_536),
+        maxBytes: Math.min(
+          maxImageBytes,
+          wholeImage
+            ? MAX_IMAGE_BYTES
+            : Math.max(1024 * 1024, width ** 2 * 4 + 65_536),
+        ),
       };
       // NOAA WMS capabilities advertise no MaxWidth/MaxHeight. One GetMap
       // returns a whole 4096×2048 extent or window, or a 1024 px tile, without

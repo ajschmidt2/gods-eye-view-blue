@@ -736,18 +736,25 @@ export function createGhostMapsLayer({
       const products = _catalog?.products || [];
       const commit = _catalog?.commit;
       const info = commit
-        ? _stream === 'open'
-          ? t('LIVE · GitHub {commit} · {message} · checked every {seconds}s', {
-              commit: commit.slice(0, 7),
-              message: _catalog.message || '—',
-              seconds: formatNumber(
-                Math.round((_catalog.pollMs || 15000) / 1000),
-              ),
-            })
-          : t('GitHub {commit} · {message} · reconnecting for live updates', {
-              commit: commit.slice(0, 7),
-              message: _catalog.message || '—',
-            })
+        ? _catalog.updateMode === 'polling'
+          ? ['GitHub ' + commit.slice(0, 7), _catalog.message]
+              .filter(Boolean)
+              .join(' · ')
+          : _stream === 'open'
+            ? t(
+                'LIVE · GitHub {commit} · {message} · checked every {seconds}s',
+                {
+                  commit: commit.slice(0, 7),
+                  message: _catalog.message || '—',
+                  seconds: formatNumber(
+                    Math.round((_catalog.pollMs || 15000) / 1000),
+                  ),
+                },
+              )
+            : t('GitHub {commit} · {message} · reconnecting for live updates', {
+                commit: commit.slice(0, 7),
+                message: _catalog.message || '—',
+              })
         : t('Connecting to the S2 GhostMaps repository…');
       return {
         segmented: {

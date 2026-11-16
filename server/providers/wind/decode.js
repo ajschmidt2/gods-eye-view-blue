@@ -1,8 +1,21 @@
+import { gunzipSync } from 'node:zlib';
+
 /** Lazy shared ecCodes WASM instance, created only for an active wind request. */
 let eccodesPromise = null;
 function loadEccodes() {
   eccodesPromise ??= import('@meri-imperiumi/eccodes-wasm')
-    .then((module) => module.createEccodes())
+    .then(async (module) => {
+      if (process.env.VERCEL !== '1') return module.createEccodes();
+      const { default: encoded } =
+        await import('../../vercel/assets/eccodes-binary.cjs');
+      const wasmBinary = gunzipSync(Buffer.from(encoded, 'base64'));
+      const compiled = await WebAssembly.compile(wasmBinary);
+      return module.createEccodes(undefined, {
+        instantiateWasm(imports, receive) {
+          receive(new WebAssembly.Instance(compiled, imports));
+        },
+      });
+    })
     .catch((error) => {
       eccodesPromise = null;
       throw error;

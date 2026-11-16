@@ -62,6 +62,7 @@ function isolate(t, env = {}) {
   });
   t.mock.method(fsp, 'mkdir', async () => {});
   t.mock.method(fsp, 'writeFile', async () => {});
+  t.mock.method(fsp, 'rename', async () => {});
   t.mock.method(globalThis, 'setInterval', () => ({ unref() {} }));
   t.mock.method(console, 'warn', () => {});
 }
