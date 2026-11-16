@@ -8,13 +8,19 @@ export function createGeminiPreviewChat(env = process.env, options = {}) {
     resolveChatModel: () => env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash-lite',
     overpassConfigured: () => false,
     admitOrigin(req) {
-      // Only deployment URLs covered by the project's Preview protection.
-      if (env.VERCEL_ENV !== 'preview') return false;
       const host = req.headers?.host;
       const origin = req.headers?.origin;
+      // Set the production host only after Vercel Authentication protects
+      // All Deployments, including that domain.
+      const allowedHosts =
+        env.VERCEL_ENV === 'preview'
+          ? [env.VERCEL_URL, env.VERCEL_BRANCH_URL]
+          : env.VERCEL_ENV === 'production'
+            ? [env.GEMINI_PRODUCTION_HOST]
+            : [];
       if (
         !host?.endsWith('.vercel.app') ||
-        ![env.VERCEL_URL, env.VERCEL_BRANCH_URL].includes(host) ||
+        !allowedHosts.includes(host) ||
         !origin
       )
         return false;

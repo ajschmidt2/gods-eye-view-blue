@@ -48,5 +48,8 @@ test('protected preview admits its own Gemini requests behind the proxy', async 
   assert.equal((await response.json()).content.parts[0].text, 'Ready');
   env.VERCEL_ENV = 'production';
   assert.equal((await send('https://' + host)).status, 403);
-  assert.equal(calls, 1);
+  env.GEMINI_PRODUCTION_HOST = host;
+  assert.equal((await send('https://elsewhere.example')).status, 403);
+  assert.equal((await send('https://' + host)).status, 200);
+  assert.equal(calls, 2);
 });

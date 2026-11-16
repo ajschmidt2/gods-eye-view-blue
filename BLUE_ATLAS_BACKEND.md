@@ -94,3 +94,7 @@ Start it with `node --env-file=.env.local server/standalone/live-feeds.js`. It l
 In Vercel Preview, set `BLUE_ATLAS_FEED_ORIGIN` to the bare HTTPS origin and set `BLUE_ATLAS_FEED_TOKEN` to the same secret. Keep the preview protected when using the quota-backed feed. Set `AISSTREAM_API_KEY` and `TOMTOM_API_KEY` only on the feed host. Use a provider key or account limit appropriate for your usage.
 
 Verify `/api/vessels` reports `status: "live"` with recent positions in a covered region and `/api/tomtom/status` reports `hasKey: true`. Zoom into a road network and check that the flow tile response is a vector tile and the layer reports live speeds. Keep simulation enabled as the fallback. To use this same-origin setup, remove any old `VITE_AIS_LIVE_API_URL` override.
+
+## Gemini on the production domain
+
+Enable Vercel Authentication for **All Deployments** under **Security → Deployment Protection**. Check the production URL while signed out and confirm it asks you to sign in. Then set `GEMINI_PRODUCTION_HOST` in the Production environment to the exact hostname (no scheme or path), such as `gods-eye-view-blue-self.vercel.app`. Keep `GEMINI_API_KEY` available to Production and deploy the updated main branch. Production chat requires the configured hostname and an exact matching browser origin. Remove `GEMINI_PRODUCTION_HOST` and redeploy before making the domain public again.
